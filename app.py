@@ -87,7 +87,7 @@ with tab1:
         v1, v2, v3 = st.columns(3)
         sbp = v1.number_input("Sistolik KB (mmHg)", value=120)
         hr = v2.number_input("Kalp Hızı (dk)", value=80)
-        sao2 = v3.number_input("SaO2 (%)", value=95)
+        sao2 = v3.number_input("SaO2 (%)", value=99)
 
         st.markdown("**Anamnez**")
         a1, a2, a3, a4 = st.columns(4)
