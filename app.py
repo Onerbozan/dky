@@ -56,7 +56,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 ])
 
 # ==========================================
-# SEKME 1: YENİ HASTA KAYDI (Mükerrer Kontrollü)
+# SEKME 1: YENİ HASTA KAYDI (Mükerrer Engelleyici)
 # ==========================================
 with tab1:
     st.subheader("Yeni Hasta Girişi (Vitaller ve Anamnez)")
@@ -80,17 +80,22 @@ with tab1:
         diu = a4.selectbox("Kronik Diüretik?", ["Hayır", "Evet"])
 
         if st.form_submit_button("Hastayı Kaydet"):
-            # 1. Aşama: TC ve İsim boş mu kontrolü
-            if len(tc) != 11 or not isim:
+            # Boşlukları temizleyelim (kullanıcı yanlışlıkla boşluk bırakırsa diye)
+            temiz_tc = tc.strip()
+            temiz_isim = isim.strip()
+            
+            # Sistemdeki TC'leri de boşluksuz ve metin olarak alalım
+            sistemdeki_tcler = df['Hasta_TC'].astype(str).str.strip().tolist()
+
+            if len(temiz_tc) != 11 or not temiz_isim:
                 st.error("Lütfen 11 haneli TC ve Ad Soyad giriniz.")
-            # 2. Aşama: TC Sistemde var mı kontrolü (YENİ EKLENEN KISIM)
-            elif tc in df['Hasta_TC'].values:
-                st.warning(f"⚠️ DİKKAT: '{tc}' TC kimlik numarası ile sistemde zaten bir kayıt mevcut! Lütfen 'İzlem (Düzenle)' veya diğer sekmeleri kullanarak hastayı güncelleyin.")
-            # 3. Aşama: Her şey uygunsa kaydet
+            elif temiz_tc in sistemdeki_tcler:
+                # EĞER TC VARSA KAYDI BLOKE ET VE KIRMIZI HATA VER
+                st.error(f"❌ HATA: '{temiz_tc}' numaralı TC önceki kayıtlarda var! Kayıt yapılamadı. Lütfen TC'yi değiştirin veya mevcut hastayı diğer sekmelerden düzenleyin.")
             else:
                 new_row = pd.DataFrame([{
                     "Kayit_Tarihi": datetime.now().strftime("%d/%m/%Y %H:%M"),
-                    "Hasta_TC": tc, "Ad_Soyad": isim.upper(), "Yas": yas, "SBP": sbp, "Nabiz": hr, "SaO2": sao2,
+                    "Hasta_TC": temiz_tc, "Ad_Soyad": temiz_isim.upper(), "Yas": yas, "SBP": sbp, "Nabiz": hr, "SaO2": sao2,
                     "Ambulans": amb, "Kanser": kan, "Diuretik": diu, "KOAH": koah,
                     "BUN": 0.0, "Kreatinin": 0.0, "Sodyum": 0.0, "Potasyum": 0.0, "Troponin": "Bilinmiyor",
                     "mEHMRG_Skoru": 0.0, "ADHERE_Grubu": "Bekleniyor", "GWTG_Skoru": 0.0,
