@@ -3,12 +3,8 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 
-# --- SAYFA AYARLARI VE TABLO İSMİ ---
+# --- SAYFA AYARLARI ---
 st.set_page_config(page_title="DKY Araştırma Portalı", layout="wide")
-
-# İŞTE ÇÖZÜM: Google sayfanızın sol altındaki ismin birebir aynısı olmalı.
-# Eğer oradaki isim farklıysa (Örn: "Sheet1"), burayı ona göre değiştirin.
-TABLO_ADI = "Dky" 
 
 # --- GİRİŞ KONTROLÜ ---
 if "logged_in" not in st.session_state:
@@ -32,8 +28,8 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
     try:
-        # ttl=0 ile önbelleği kapatıyoruz, hep en güncel veriyi çeker
-        df = conn.read(worksheet=TABLO_ADI, ttl=0)
+        # worksheet parametresi tamamen kaldırıldı, doğrudan ilk sayfayı okur
+        df = conn.read(ttl=0) 
         if df.empty:
             return pd.DataFrame(columns=[
                 "Kayit_Tarihi", "Hasta_TC", "Ad_Soyad", "Yas", "SBP", "Nabiz", "SaO2",
@@ -44,8 +40,8 @@ def load_data():
         df['Hasta_TC'] = df['Hasta_TC'].astype(str)
         return df
     except Exception as e:
-        st.error(f"⚠️ Tablo okunamadı! Lütfen Google E-Tablonuzun sol altındaki sekme adının '{TABLO_ADI}' olduğundan emin olun.")
-        st.stop() # Hata verirse devam etmesini engelle
+        st.error(f"⚠️ Bağlantı hatası: {e}\nLütfen Google API anahtarlarının (Service Account) Secrets bölümünde eksiksiz olduğundan emin olun.")
+        st.stop()
         return pd.DataFrame()
 
 df = load_data()
@@ -83,15 +79,20 @@ with tab1:
                     "Kayit_Tarihi": datetime.now().strftime("%d/%m/%Y %H:%M"),
                     "Hasta_TC": tc, "Ad_Soyad": isim.upper(), "Yas": yas, "SBP": sbp, "Nabiz": hr, "SaO2": sao2,
                     "Ambulans": amb, "Kanser": kan, "Diuretik": diu, "KOAH": koah,
-                    "BUN": 0, "Kreatinin": 0, "Sodyum": 0, "Potasyum": 0, "Troponin": "Bilinmiyor",
-                    "mEHMRG_Skoru": 0, "ADHERE_Grubu": "Bekleniyor", "GWTG_Skoru": 0,
+                    "BUN": 0.0, "Kreatinin": 0.0, "Sodyum": 0.0, "Potasyum": 0.0, "Troponin": "Bilinmiyor",
+                    "mEHMRG_Skoru": 0.0, "ADHERE_Grubu": "Bekleniyor", "GWTG_Skoru": 0.0,
                     "AS_Sonlanim": "Bilinmiyor", "Servis_Gunu": 0, "YBU_Gunu": 0, "Mortalite_7G": "Bilinmiyor", "Mortalite_30G": "Bilinmiyor"
                 }])
                 updated = pd.concat([df, new_row], ignore_index=True)
-                conn.update(worksheet=TABLO_ADI, data=updated)
+                
+                # Kaydetme komutundan worksheet kaldırıldı
+                conn.update(data=updated)
+                
+                st.cache_data.clear()
                 st.success("Hasta başarıyla kaydedildi. Lab verileri için yan sekmeye geçiniz.")
                 st.rerun()
-            else: st.error("Lütfen 11 haneli TC ve Ad Soyad giriniz.")
+            else: 
+                st.error("Lütfen 11 haneli TC ve Ad Soyad giriniz.")
 
 # ==========================================
 # SEKME 2: LAB VERİ GİRİŞİ (Arama + Lab)
@@ -137,7 +138,8 @@ with tab2:
                     df.at[idx, 'ADHERE_Grubu'] = adhere
                     df.at[idx, 'GWTG_Skoru'] = gwtg
                     
-                    conn.update(worksheet=TABLO_ADI, data=df)
+                    conn.update(data=df)
+                    st.cache_data.clear()
                     st.success("Laboratuvar verileri kaydedildi ve tüm skorlar güncellendi!")
                     st.rerun()
 
@@ -179,7 +181,8 @@ with tab3:
                     df.at[idx2, 'Mortalite_7G'] = m7
                     df.at[idx2, 'Mortalite_30G'] = m30
                     
-                    conn.update(worksheet=TABLO_ADI, data=df)
+                    conn.update(data=df)
+                    st.cache_data.clear()
                     st.success("Takip verileri güncellendi.")
                     st.rerun()
 
@@ -190,7 +193,7 @@ with tab4:
     st.subheader("Vaka Kontrol Paneli")
     if not df.empty:
         def get_status(r):
-            if r['BUN'] == 0 or r['Mortalite_30G'] == "Bilinmiyor": return "🔴 Eksik"
+            if r['BUN'] == 0.0 or r['Mortalite_30G'] == "Bilinmiyor": return "🔴 Eksik"
             return "🟢 Tamam"
         
         df_view = df.copy()
