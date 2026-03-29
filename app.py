@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import time
 
 # --- SAYFA AYARLARI ---
-st.set_page_config(page_title="DKY Araştırma Portalı", layout="wide")
+st.set_page_config(page_title="Bozan DKY Araştırma Portalı", layout="wide")
 
 # --- GİRİŞ KONTROLÜ VE OTURUM YÖNETİMİ ---
 if "logged_in" not in st.session_state:
@@ -13,7 +13,7 @@ if "logged_in" not in st.session_state:
     st.session_state.username = ""
 
 if not st.session_state.logged_in:
-    st.title("🔒 DKY Çalışma Girişi")
+    st.title("🔒 Bozan DKY Çalışma Girişi")
     with st.form("login"):
         u = st.text_input("Kullanıcı Adı")
         p = st.text_input("Şifre", type="password")
@@ -26,14 +26,9 @@ if not st.session_state.logged_in:
                 st.error("Hatalı giriş! Şifreyi veya kullanıcı adını kontrol edin.")
     st.stop()
 
-# --- YAN MENÜ (SİDEBAR) - KARŞILAMA VE ÇIKIŞ ---
-with st.sidebar:
-    st.markdown(f"### 👤 Hoş geldin, **{st.session_state.username.capitalize()}**")
-    st.markdown("---")
-    if st.button("🚪 Çıkış Yap"):
-        st.session_state.logged_in = False
-        st.session_state.username = ""
-        st.rerun()
+# --- ANA EKRAN KARŞILAMA (EN ÜSTTE) ---
+st.markdown(f"### 👤 Hoş geldin, **{st.session_state.username.capitalize()}**")
+st.markdown("---")
 
 # --- VERİ BAĞLANTISI ---
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -245,7 +240,6 @@ with tab4:
         
         df_view.insert(0, 'Durum', df_view.apply(get_status, axis=1))
         
-        # 'Kaydeden' sütunu eklendi
         all_cols = ['Durum', 'Kayit_Tarihi', 'Kaydeden', 'Hasta_TC', 'Ad_Soyad', 'Yas', 'SBP', 'Nabiz', 'SaO2', 
                     'Ambulans', 'Kanser', 'Diuretik', 'KOAH', 'BUN', 'Kreatinin', 'Sodyum', 'Potasyum', 
                     'Troponin', 'mEHMRG_Skoru', 'ADHERE_Grubu', 'GWTG_Skoru', 'AS_Sonlanim', 
@@ -255,7 +249,6 @@ with tab4:
             df_view[all_cols],
             use_container_width=True,
             hide_index=True,
-            # Kaydeden kişiyi ve TC'yi kimse değiştiremesin diye kilitliyoruz
             disabled=["Durum", "Kayit_Tarihi", "Kaydeden", "Hasta_TC", "mEHMRG_Skoru", "ADHERE_Grubu", "GWTG_Skoru"]
         )
         
@@ -342,3 +335,10 @@ with tab5:
         )
     else:
         st.info("Henüz sistemde raporlanacak hasta bulunmamaktadır.")
+
+# --- ÇIKIŞ BUTONU (EN ALTTA) ---
+st.markdown("---")
+if st.button("🚪 Güvenli Çıkış Yap"):
+    st.session_state.logged_in = False
+    st.session_state.username = ""
+    st.rerun()
