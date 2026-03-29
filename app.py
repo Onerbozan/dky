@@ -37,7 +37,8 @@ def load_data():
                 "Potasyum", "Troponin", "mEHMRG_Skoru", "ADHERE_Grubu", "GWTG_Skoru",
                 "AS_Sonlanim", "Servis_Gunu", "YBU_Gunu", "Mortalite_7G", "Mortalite_30G"
             ])
-        df['Hasta_TC'] = df['Hasta_TC'].astype(str)
+        # Veritabanından gelen TC'lerin arkasındaki olası .0 sayısal değerlerini en baştan temizle
+        df['Hasta_TC'] = df['Hasta_TC'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
         return df
     except Exception as e:
         st.error(f"⚠️ Bağlantı hatası: {e}")
@@ -80,18 +81,18 @@ with tab1:
         diu = a4.selectbox("Kronik Diüretik?", ["Hayır", "Evet"])
 
         if st.form_submit_button("Hastayı Kaydet"):
-            # Boşlukları temizleyelim (kullanıcı yanlışlıkla boşluk bırakırsa diye)
-            temiz_tc = tc.strip()
+            # Formdan gelen TC'yi temizle
+            temiz_tc = str(tc).strip()
             temiz_isim = isim.strip()
             
-            # Sistemdeki TC'leri de boşluksuz ve metin olarak alalım
-            sistemdeki_tcler = df['Hasta_TC'].astype(str).str.strip().tolist()
+            # Sistemdeki TC'leri KESİN OLARAK sayısal kalıntılardan arındırarak listeye çevir
+            sistemdeki_tcler = [str(x).split('.')[0].strip() for x in df['Hasta_TC'].tolist()]
 
             if len(temiz_tc) != 11 or not temiz_isim:
                 st.error("Lütfen 11 haneli TC ve Ad Soyad giriniz.")
             elif temiz_tc in sistemdeki_tcler:
                 # EĞER TC VARSA KAYDI BLOKE ET VE KIRMIZI HATA VER
-                st.error(f"❌ HATA: '{temiz_tc}' numaralı TC önceki kayıtlarda var! Kayıt yapılamadı. Lütfen TC'yi değiştirin veya mevcut hastayı diğer sekmelerden düzenleyin.")
+                st.error(f"❌ HATA: '{temiz_tc}' numaralı TC önceki kayıtlarda var! Kayıt yapılamadı. Lütfen hastayı 'İzlem (Düzenle)' veya diğer sekmelerden güncelleyin.")
             else:
                 new_row = pd.DataFrame([{
                     "Kayit_Tarihi": datetime.now().strftime("%d/%m/%Y %H:%M"),
