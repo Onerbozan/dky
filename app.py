@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import time
 
 # --- SAYFA AYARLARI ---
-st.set_page_config(page_title="DKY Araştırma Portalı", layout="wide")
+st.set_page_config(page_title="Bozan DKY Araştırma Portalı", layout="wide")
 
 # --- GİRİŞ KONTROLÜ ---
 if "logged_in" not in st.session_state:
@@ -37,7 +37,6 @@ def load_data():
                 "Potasyum", "Troponin", "mEHMRG_Skoru", "ADHERE_Grubu", "GWTG_Skoru",
                 "AS_Sonlanim", "Servis_Gunu", "YBU_Gunu", "Mortalite_7G", "Mortalite_30G"
             ])
-        # Veritabanından gelen TC'lerin arkasındaki olası .0 sayısal değerlerini en baştan temizle
         df['Hasta_TC'] = df['Hasta_TC'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
         return df
     except Exception as e:
@@ -57,10 +56,14 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 ])
 
 # ==========================================
-# SEKME 1: YENİ HASTA KAYDI (Mükerrer Engelleyici)
+# SEKME 1: YENİ HASTA KAYDI (Kırmızı Uyarı ve Çerçeve)
 # ==========================================
 with tab1:
     st.subheader("Yeni Hasta Girişi (Vitaller ve Anamnez)")
+    
+    # Uyarının aşağıda değil, formun hemen üstünde çıkması için özel alan
+    uyari_alani = st.empty()
+    
     with st.form("new_reg", clear_on_submit=True):
         c1, c2, c3 = st.columns(3)
         tc = c1.text_input("Hasta TC*", max_chars=11)
@@ -81,18 +84,26 @@ with tab1:
         diu = a4.selectbox("Kronik Diüretik?", ["Hayır", "Evet"])
 
         if st.form_submit_button("Hastayı Kaydet"):
-            # Formdan gelen TC'yi temizle
             temiz_tc = str(tc).strip()
             temiz_isim = isim.strip()
-            
-            # Sistemdeki TC'leri KESİN OLARAK sayısal kalıntılardan arındırarak listeye çevir
             sistemdeki_tcler = [str(x).split('.')[0].strip() for x in df['Hasta_TC'].tolist()]
 
             if len(temiz_tc) != 11 or not temiz_isim:
-                st.error("Lütfen 11 haneli TC ve Ad Soyad giriniz.")
+                uyari_alani.error("Lütfen 11 haneli TC ve Ad Soyad giriniz.")
             elif temiz_tc in sistemdeki_tcler:
-                # EĞER TC VARSA KAYDI BLOKE ET VE KIRMIZI HATA VER
-                st.error(f"❌ HATA: '{temiz_tc}' numaralı TC önceki kayıtlarda var! Kayıt yapılamadı. Lütfen hastayı 'İzlem (Düzenle)' veya diğer sekmelerden güncelleyin.")
+                # 1. Mesajı yukarıdaki alana yazdır
+                uyari_alani.error(f"❌ HATA: '{temiz_tc}' numaralı TC önceki kayıtlarda var! Lütfen TC'yi değiştirin.")
+                
+                # 2. TC Kutusunun çevresini kırmızı yapacak CSS kodunu sayfaya enjekte et
+                st.markdown("""
+                    <style>
+                    div[data-testid="stTextInput"] input[aria-label="Hasta TC*"] {
+                        border: 2px solid red !important;
+                        background-color: #fff0f0 !important;
+                        border-radius: 5px !important;
+                    }
+                    </style>
+                """, unsafe_allow_html=True)
             else:
                 new_row = pd.DataFrame([{
                     "Kayit_Tarihi": datetime.now().strftime("%d/%m/%Y %H:%M"),
@@ -107,7 +118,7 @@ with tab1:
                 conn.update(data=updated)
                 st.cache_data.clear()
                 
-                st.success("✅ Hasta başarıyla kaydedildi! Form temizlendi.")
+                uyari_alani.success("✅ Hasta başarıyla kaydedildi! Form temizlendi.")
                 time.sleep(1.5)
                 st.rerun()
 
