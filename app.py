@@ -8,7 +8,7 @@ st.set_page_config(page_title="DKY Araştırma Portalı", layout="wide")
 
 # İŞTE ÇÖZÜM: Google sayfanızın sol altındaki ismin birebir aynısı olmalı.
 # Eğer oradaki isim farklıysa (Örn: "Sheet1"), burayı ona göre değiştirin.
-TABLO_ADI = "Sayfa1" 
+TABLO_ADI = "Dky" 
 
 # --- GİRİŞ KONTROLÜ ---
 if "logged_in" not in st.session_state:
