@@ -47,7 +47,7 @@ def load_data():
 df = load_data()
 
 # --- SEKMELER ---
-tab1, tab2, tab3, tab4 = st.tabs(["➕ Yeni Hasta Kaydı", "🧪 Lab Veri Girişi", "🏥 Takip & Sonlanım", "📋 İzlem Paneli (Düzenlenebilir)"])
+tab1, tab2, tab3, tab4 = st.tabs(["➕ Yeni Hasta Kaydı", "🧪 Lab Veri Girişi", "🏥 Takip & Sonlanım", "📋 İzlem Paneli (Tümü Düzenlenebilir)"])
 
 # ==========================================
 # SEKME 1: YENİ HASTA KAYDI
@@ -192,42 +192,55 @@ with tab3:
 # ==========================================
 with tab4:
     st.subheader("Vaka Kontrol ve Hızlı Düzenleme Paneli")
-    st.info("💡 Tablodaki herhangi bir hücreye **çift tıklayarak** veriyi tıpkı Excel'deki gibi doğrudan değiştirebilirsiniz. Tüm değişiklikleri bitirdikten sonra aşağıdaki kaydet butonuna basın.")
+    st.info("💡 Tablodaki hücrelere çift tıklayarak tüm verileri değiştirebilirsiniz. Değişiklikleriniz skorları otomatik güncelleyecektir. Sağa doğru kaydırarak tüm sütunları görebilirsiniz.")
     
     if not df.empty:
-        # Görsel Durum Etiketi Ekleme (🔴 Eksik / 🟢 Tamam)
         df_view = df.copy()
+        
+        # Eksik veri kontrolü
         def get_status(r):
             if r['BUN'] == 0.0 or r['Mortalite_30G'] == "Bilinmiyor": return "🔴 Eksik"
             return "🟢 Tamam"
         
-        # En başa 'Durum' sütunu ekleniyor
         df_view.insert(0, 'Durum', df_view.apply(get_status, axis=1))
         
-        # Sadece bu sütunları ekranda gösterip düzenlemeye açıyoruz
-        disp_cols = ['Durum', 'Kayit_Tarihi', 'Hasta_TC', 'Ad_Soyad', 'SBP', 'BUN', 'Kreatinin', 'Troponin', 'mEHMRG_Skoru', 'ADHERE_Grubu', 'AS_Sonlanim', 'Mortalite_30G']
+        # Tüm sütunlar ekranda (Sadece otomatik hesaplananları düzenlemeye kapatıyoruz)
+        all_cols = ['Durum', 'Kayit_Tarihi', 'Hasta_TC', 'Ad_Soyad', 'Yas', 'SBP', 'Nabiz', 'SaO2', 
+                    'Ambulans', 'Kanser', 'Diuretik', 'KOAH', 'BUN', 'Kreatinin', 'Sodyum', 'Potasyum', 
+                    'Troponin', 'mEHMRG_Skoru', 'ADHERE_Grubu', 'GWTG_Skoru', 'AS_Sonlanim', 
+                    'Servis_Gunu', 'YBU_Gunu', 'Mortalite_7G', 'Mortalite_30G']
         
-        # Data Editor (Kullanıcı çift tıklayıp değiştirebilir)
         edited_df = st.data_editor(
-            df_view[disp_cols],
+            df_view[all_cols],
             use_container_width=True,
             hide_index=True,
-            disabled=["Durum", "Kayit_Tarihi", "Hasta_TC", "mEHMRG_Skoru", "ADHERE_Grubu"] # TC ve hesaplanan risk skorları kilitli
+            disabled=["Durum", "Kayit_Tarihi", "Hasta_TC", "mEHMRG_Skoru", "ADHERE_Grubu", "GWTG_Skoru"] # Skorlar kilitli
         )
         
         if st.button("💾 Tablodaki Değişiklikleri Kaydet ve Skorları Güncelle"):
-            # Orijinal tabloyu (df) düzenlenen hücrelerle eşleştir ve skorları yeniden hesapla
+            # Tüm düzenlenebilir sütunları ana veritabanına aktar
             for idx, row in edited_df.iterrows():
-                # Kullanıcının ekranda değiştirdiği verileri ana df'e aktar
+                df.at[idx, 'Ad_Soyad'] = str(row['Ad_Soyad'])
+                df.at[idx, 'Yas'] = int(row['Yas'])
                 df.at[idx, 'SBP'] = float(row['SBP'])
+                df.at[idx, 'Nabiz'] = float(row['Nabiz'])
+                df.at[idx, 'SaO2'] = float(row['SaO2'])
+                df.at[idx, 'Ambulans'] = str(row['Ambulans'])
+                df.at[idx, 'Kanser'] = str(row['Kanser'])
+                df.at[idx, 'Diuretik'] = str(row['Diuretik'])
+                df.at[idx, 'KOAH'] = str(row['KOAH'])
                 df.at[idx, 'BUN'] = float(row['BUN'])
                 df.at[idx, 'Kreatinin'] = float(row['Kreatinin'])
+                df.at[idx, 'Sodyum'] = float(row['Sodyum'])
+                df.at[idx, 'Potasyum'] = float(row['Potasyum'])
                 df.at[idx, 'Troponin'] = str(row['Troponin'])
-                df.at[idx, 'Ad_Soyad'] = str(row['Ad_Soyad'])
                 df.at[idx, 'AS_Sonlanim'] = str(row['AS_Sonlanim'])
+                df.at[idx, 'Servis_Gunu'] = int(row['Servis_Gunu'])
+                df.at[idx, 'YBU_Gunu'] = int(row['YBU_Gunu'])
+                df.at[idx, 'Mortalite_7G'] = str(row['Mortalite_7G'])
                 df.at[idx, 'Mortalite_30G'] = str(row['Mortalite_30G'])
                 
-                # Yeni değerlere göre skorları arka planda otomatik hesapla
+                # Risk skorlarını yeni girilen verilerle otomatik olarak tekrar hesapla
                 r = df.iloc[idx]
                 try:
                     mehmrg = (2 * r['Yas']) + (60 if r['Ambulans'] == "Evet" else 0) - r['SBP'] + r['Nabiz'] - (2 * r['SaO2']) + (20 * r['Kreatinin']) + (45 if r['Kanser'] == "Evet" else 0) + (60 if r['Troponin'] == "Pozitif" else 0) + (60 if r['Diuretik'] == "Evet" else 0) + 12
@@ -247,10 +260,10 @@ with tab4:
                 except:
                     pass
             
-            # Ana veritabanını (Google Sheets) güncelle
+            # Değişiklikleri Google Sheets'e gönder
             conn.update(data=df)
             st.cache_data.clear()
-            st.success("✅ Değişiklikler kaydedildi ve risk skorları başarıyla güncellendi!")
+            st.success("✅ Tüm veriler kaydedildi ve risk skorları başarıyla güncellendi!")
             time.sleep(1.5)
             st.rerun()
     else: 
