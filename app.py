@@ -2,6 +2,7 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
+import time
 
 # --- SAYFA AYARLARI ---
 st.set_page_config(page_title="DKY Araştırma Portalı", layout="wide")
@@ -28,7 +29,6 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
     try:
-        # worksheet parametresi tamamen kaldırıldı, doğrudan ilk sayfayı okur
         df = conn.read(ttl=0) 
         if df.empty:
             return pd.DataFrame(columns=[
@@ -54,7 +54,8 @@ tab1, tab2, tab3, tab4 = st.tabs(["➕ Yeni Hasta Kaydı", "🧪 Lab Veri Giriş
 # ==========================================
 with tab1:
     st.subheader("Yeni Hasta Girişi (Vitaller ve Anamnez)")
-    with st.form("new_reg"):
+    # clear_on_submit=True ile butona basıldığında form içindeki her şey sıfırlanır
+    with st.form("new_reg", clear_on_submit=True):
         c1, c2, c3 = st.columns(3)
         tc = c1.text_input("Hasta TC*", max_chars=11)
         isim = c2.text_input("Ad Soyad*")
@@ -85,12 +86,12 @@ with tab1:
                 }])
                 updated = pd.concat([df, new_row], ignore_index=True)
                 
-                # Kaydetme komutundan worksheet kaldırıldı
                 conn.update(data=updated)
-                
                 st.cache_data.clear()
-                st.success("Hasta başarıyla kaydedildi. Lab verileri için yan sekmeye geçiniz.")
-                st.rerun()
+                
+                st.success("✅ Hasta başarıyla kaydedildi! Form temizlendi, yeni hasta girebilir veya düzenleme sekmelerine geçebilirsiniz.")
+                time.sleep(1.5) # Mesajın ekranda 1.5 saniye kalmasını sağlar
+                st.rerun() # Sayfayı yeniler
             else: 
                 st.error("Lütfen 11 haneli TC ve Ad Soyad giriniz.")
 
@@ -108,7 +109,7 @@ with tab2:
             row = df[df['Hasta_TC'] == t_id].iloc[0]
             idx = df.index[df['Hasta_TC'] == t_id][0]
             
-            with st.form("lab_form"):
+            with st.form("lab_form", clear_on_submit=True):
                 l1, l2, l3, l4, l5 = st.columns(5)
                 f_bun = l1.number_input("BUN", value=float(row['BUN']))
                 f_cre = l2.number_input("Kreatinin", value=float(row['Kreatinin']))
@@ -117,7 +118,6 @@ with tab2:
                 f_tro = l5.selectbox("Troponin", ["Negatif", "Pozitif"], index=0 if row['Troponin'] != "Pozitif" else 1)
                 
                 if st.form_submit_button("Laboratuvar Verilerini Kaydet ve Skorları Hesapla"):
-                    # SKOR HESAPLAMA MANTIĞI
                     mehmrg = (2 * row['Yas']) + (60 if row['Ambulans'] == "Evet" else 0) - row['SBP'] + row['Nabiz'] - (2 * row['SaO2']) + (20 * f_cre) + (45 if row['Kanser'] == "Evet" else 0) + (60 if f_tro == "Pozitif" else 0) + (60 if row['Diuretik'] == "Evet" else 0) + 12
                     if f_pot >= 4.6: mehmrg += 30
                     elif f_pot <= 3.9: mehmrg += 5
@@ -140,7 +140,8 @@ with tab2:
                     
                     conn.update(data=df)
                     st.cache_data.clear()
-                    st.success("Laboratuvar verileri kaydedildi ve tüm skorlar güncellendi!")
+                    st.success("✅ Laboratuvar verileri kaydedildi ve tüm skorlar güncellendi!")
+                    time.sleep(1.5)
                     st.rerun()
 
 # ==========================================
@@ -157,7 +158,7 @@ with tab3:
             row2 = df[df['Hasta_TC'] == t_id2].iloc[0]
             idx2 = df.index[df['Hasta_TC'] == t_id2][0]
             
-            with st.form("follow_form"):
+            with st.form("follow_form", clear_on_submit=True):
                 f1, f2, f3 = st.columns(3)
                 son_ops = ["Bilinmiyor", "Taburcu", "Servis Yatış", "Yoğun Bakım"]
                 s_idx = son_ops.index(row2['AS_Sonlanim']) if row2['AS_Sonlanim'] in son_ops else 0
@@ -183,7 +184,8 @@ with tab3:
                     
                     conn.update(data=df)
                     st.cache_data.clear()
-                    st.success("Takip verileri güncellendi.")
+                    st.success("✅ Takip verileri başarıyla güncellendi.")
+                    time.sleep(1.5)
                     st.rerun()
 
 # ==========================================
