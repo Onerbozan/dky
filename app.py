@@ -3,8 +3,12 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 
-# --- SAYFA AYARLARI ---
+# --- SAYFA AYARLARI VE TABLO İSMİ ---
 st.set_page_config(page_title="DKY Araştırma Portalı", layout="wide")
+
+# İŞTE ÇÖZÜM: Google sayfanızın sol altındaki ismin birebir aynısı olmalı.
+# Eğer oradaki isim farklıysa (Örn: "Sheet1"), burayı ona göre değiştirin.
+TABLO_ADI = "Sayfa1" 
 
 # --- GİRİŞ KONTROLÜ ---
 if "logged_in" not in st.session_state:
@@ -16,27 +20,33 @@ if not st.session_state.logged_in:
         u = st.text_input("Kullanıcı Adı")
         p = st.text_input("Şifre", type="password")
         if st.form_submit_button("Giriş"):
-            if u in st.secrets["passwords"] and st.secrets["passwords"][u] == p:
+            if "passwords" in st.secrets and u in st.secrets["passwords"] and st.secrets["passwords"][u] == p:
                 st.session_state.logged_in = True
                 st.rerun()
-            else: st.error("Hatalı giriş!")
+            else: 
+                st.error("Hatalı giriş! Şifreyi veya kullanıcı adını kontrol edin.")
     st.stop()
 
 # --- VERİ BAĞLANTISI ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-@st.cache_data(ttl=0)
 def load_data():
-    df = conn.read(worksheet="Sheet1")
-    if df.empty:
-        return pd.DataFrame(columns=[
-            "Kayit_Tarihi", "Hasta_TC", "Ad_Soyad", "Yas", "SBP", "Nabiz", "SaO2",
-            "Ambulans", "Kanser", "Diuretik", "KOAH", "BUN", "Kreatinin", "Sodyum", 
-            "Potasyum", "Troponin", "mEHMRG_Skoru", "ADHERE_Grubu", "GWTG_Skoru",
-            "AS_Sonlanim", "Servis_Gunu", "YBU_Gunu", "Mortalite_7G", "Mortalite_30G"
-        ])
-    df['Hasta_TC'] = df['Hasta_TC'].astype(str)
-    return df
+    try:
+        # ttl=0 ile önbelleği kapatıyoruz, hep en güncel veriyi çeker
+        df = conn.read(worksheet=TABLO_ADI, ttl=0)
+        if df.empty:
+            return pd.DataFrame(columns=[
+                "Kayit_Tarihi", "Hasta_TC", "Ad_Soyad", "Yas", "SBP", "Nabiz", "SaO2",
+                "Ambulans", "Kanser", "Diuretik", "KOAH", "BUN", "Kreatinin", "Sodyum", 
+                "Potasyum", "Troponin", "mEHMRG_Skoru", "ADHERE_Grubu", "GWTG_Skoru",
+                "AS_Sonlanim", "Servis_Gunu", "YBU_Gunu", "Mortalite_7G", "Mortalite_30G"
+            ])
+        df['Hasta_TC'] = df['Hasta_TC'].astype(str)
+        return df
+    except Exception as e:
+        st.error(f"⚠️ Tablo okunamadı! Lütfen Google E-Tablonuzun sol altındaki sekme adının '{TABLO_ADI}' olduğundan emin olun.")
+        st.stop() # Hata verirse devam etmesini engelle
+        return pd.DataFrame()
 
 df = load_data()
 
@@ -78,11 +88,10 @@ with tab1:
                     "AS_Sonlanim": "Bilinmiyor", "Servis_Gunu": 0, "YBU_Gunu": 0, "Mortalite_7G": "Bilinmiyor", "Mortalite_30G": "Bilinmiyor"
                 }])
                 updated = pd.concat([df, new_row], ignore_index=True)
-                conn.update(worksheet="Sheet1", data=updated)
+                conn.update(worksheet=TABLO_ADI, data=updated)
                 st.success("Hasta başarıyla kaydedildi. Lab verileri için yan sekmeye geçiniz.")
-                st.cache_data.clear()
                 st.rerun()
-            else: st.error("Lütfen yıldızlı alanları doldurun.")
+            else: st.error("Lütfen 11 haneli TC ve Ad Soyad giriniz.")
 
 # ==========================================
 # SEKME 2: LAB VERİ GİRİŞİ (Arama + Lab)
@@ -128,9 +137,8 @@ with tab2:
                     df.at[idx, 'ADHERE_Grubu'] = adhere
                     df.at[idx, 'GWTG_Skoru'] = gwtg
                     
-                    conn.update(worksheet="Sheet1", data=df)
+                    conn.update(worksheet=TABLO_ADI, data=df)
                     st.success("Laboratuvar verileri kaydedildi ve tüm skorlar güncellendi!")
-                    st.cache_data.clear()
                     st.rerun()
 
 # ==========================================
@@ -149,13 +157,20 @@ with tab3:
             
             with st.form("follow_form"):
                 f1, f2, f3 = st.columns(3)
-                son = f1.selectbox("Sonlanım", ["Bilinmiyor", "Taburcu", "Servis Yatış", "Yoğun Bakım"], index=0)
+                son_ops = ["Bilinmiyor", "Taburcu", "Servis Yatış", "Yoğun Bakım"]
+                s_idx = son_ops.index(row2['AS_Sonlanim']) if row2['AS_Sonlanim'] in son_ops else 0
+                son = f1.selectbox("Sonlanım", son_ops, index=s_idx)
+                
                 s_gun = f2.number_input("Servis Gün", 0, 100, int(row2['Servis_Gunu']))
                 y_gun = f3.number_input("YBÜ Gün", 0, 100, int(row2['YBU_Gunu']))
                 
                 m1, m2 = st.columns(2)
-                m7 = m1.selectbox("7 Günlük Mortalite", ["Bilinmiyor", "Sağ", "Eks"], index=0)
-                m30 = m2.selectbox("30 Günlük Mortalite", ["Bilinmiyor", "Sağ", "Eks"], index=0)
+                mort_ops = ["Bilinmiyor", "Sağ", "Eks"]
+                m7_idx = mort_ops.index(row2['Mortalite_7G']) if row2['Mortalite_7G'] in mort_ops else 0
+                m30_idx = mort_ops.index(row2['Mortalite_30G']) if row2['Mortalite_30G'] in mort_ops else 0
+                
+                m7 = m1.selectbox("7 Günlük Mortalite", mort_ops, index=m7_idx)
+                m30 = m2.selectbox("30 Günlük Mortalite", mort_ops, index=m30_idx)
                 
                 if st.form_submit_button("Takip Verilerini Güncelle"):
                     df.at[idx2, 'AS_Sonlanim'] = son
@@ -164,9 +179,8 @@ with tab3:
                     df.at[idx2, 'Mortalite_7G'] = m7
                     df.at[idx2, 'Mortalite_30G'] = m30
                     
-                    conn.update(worksheet="Sheet1", data=df)
+                    conn.update(worksheet=TABLO_ADI, data=df)
                     st.success("Takip verileri güncellendi.")
-                    st.cache_data.clear()
                     st.rerun()
 
 # ==========================================
@@ -179,7 +193,9 @@ with tab4:
             if r['BUN'] == 0 or r['Mortalite_30G'] == "Bilinmiyor": return "🔴 Eksik"
             return "🟢 Tamam"
         
-        df['Durum'] = df.apply(get_status, axis=1)
+        df_view = df.copy()
+        df_view['Durum'] = df_view.apply(get_status, axis=1)
         disp_cols = ['Durum', 'Hasta_TC', 'Ad_Soyad', 'mEHMRG_Skoru', 'ADHERE_Grubu', 'AS_Sonlanim', 'Mortalite_30G']
-        st.dataframe(df[disp_cols], use_container_width=True, hide_index=True)
-    else: st.info("Henüz kayıtlı hasta yok.")
+        st.dataframe(df_view[disp_cols], use_container_width=True, hide_index=True)
+    else: 
+        st.info("Henüz kayıtlı hasta yok.")
