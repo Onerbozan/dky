@@ -56,11 +56,10 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 ])
 
 # ==========================================
-# SEKME 1: YENİ HASTA KAYDI (Temizlenir)
+# SEKME 1: YENİ HASTA KAYDI (Mükerrer Kontrollü)
 # ==========================================
 with tab1:
     st.subheader("Yeni Hasta Girişi (Vitaller ve Anamnez)")
-    # Sadece Yeni Kayıt formu gönderildiğinde temizlenir
     with st.form("new_reg", clear_on_submit=True):
         c1, c2, c3 = st.columns(3)
         tc = c1.text_input("Hasta TC*", max_chars=11)
@@ -81,7 +80,14 @@ with tab1:
         diu = a4.selectbox("Kronik Diüretik?", ["Hayır", "Evet"])
 
         if st.form_submit_button("Hastayı Kaydet"):
-            if len(tc) == 11 and isim:
+            # 1. Aşama: TC ve İsim boş mu kontrolü
+            if len(tc) != 11 or not isim:
+                st.error("Lütfen 11 haneli TC ve Ad Soyad giriniz.")
+            # 2. Aşama: TC Sistemde var mı kontrolü (YENİ EKLENEN KISIM)
+            elif tc in df['Hasta_TC'].values:
+                st.warning(f"⚠️ DİKKAT: '{tc}' TC kimlik numarası ile sistemde zaten bir kayıt mevcut! Lütfen 'İzlem (Düzenle)' veya diğer sekmeleri kullanarak hastayı güncelleyin.")
+            # 3. Aşama: Her şey uygunsa kaydet
+            else:
                 new_row = pd.DataFrame([{
                     "Kayit_Tarihi": datetime.now().strftime("%d/%m/%Y %H:%M"),
                     "Hasta_TC": tc, "Ad_Soyad": isim.upper(), "Yas": yas, "SBP": sbp, "Nabiz": hr, "SaO2": sao2,
@@ -98,11 +104,9 @@ with tab1:
                 st.success("✅ Hasta başarıyla kaydedildi! Form temizlendi.")
                 time.sleep(1.5)
                 st.rerun()
-            else: 
-                st.error("Lütfen 11 haneli TC ve Ad Soyad giriniz.")
 
 # ==========================================
-# SEKME 2: LAB VERİ GİRİŞİ (Eski veri kalır)
+# SEKME 2: LAB VERİ GİRİŞİ
 # ==========================================
 with tab2:
     st.subheader("Laboratuvar Sonuçlarını İşle")
@@ -115,7 +119,6 @@ with tab2:
             row = df[df['Hasta_TC'] == t_id].iloc[0]
             idx = df.index[df['Hasta_TC'] == t_id][0]
             
-            # clear_on_submit KALDIRILDI. Eski veriler formda görünür.
             with st.form("lab_form"):
                 l1, l2, l3, l4, l5 = st.columns(5)
                 f_bun = l1.number_input("BUN", value=float(row['BUN']))
@@ -151,7 +154,7 @@ with tab2:
                     st.rerun()
 
 # ==========================================
-# SEKME 3: TAKİP & SONLANIM (Eski veri kalır)
+# SEKME 3: TAKİP & SONLANIM
 # ==========================================
 with tab3:
     st.subheader("Yatış Bilgileri ve Mortalite Takibi")
@@ -164,7 +167,6 @@ with tab3:
             row2 = df[df['Hasta_TC'] == t_id2].iloc[0]
             idx2 = df.index[df['Hasta_TC'] == t_id2][0]
             
-            # clear_on_submit KALDIRILDI. Eski yatış günleri vs. ekranda görünür.
             with st.form("follow_form"):
                 f1, f2, f3 = st.columns(3)
                 son_ops = ["Bilinmiyor", "Taburcu", "Servis Yatış", "Yoğun Bakım"]
@@ -274,18 +276,15 @@ with tab4:
 with tab5:
     st.subheader("📊 Araştırma İstatistikleri ve Yedekleme")
     if not df.empty:
-        # Tarih formatını hesaplanabilir hale getir (Haftalık rapor için)
         df['Tarih_Obj'] = pd.to_datetime(df['Kayit_Tarihi'], format="%d/%m/%Y %H:%M", errors='coerce')
         
         bugun = datetime.now()
         bir_hafta_once = bugun - timedelta(days=7)
         
-        # Haftalık ve Toplam Hesaplamalar
         toplam_hasta = len(df)
         haftalik_hasta = len(df[df['Tarih_Obj'] >= bir_hafta_once])
         eksik_veri = len(df[(df['BUN'] == 0.0) | (df['Mortalite_30G'] == "Bilinmiyor")])
         
-        # Metrikleri Gösterme
         col_m1, col_m2, col_m3 = st.columns(3)
         col_m1.metric("Toplam Kaydedilen Hasta", f"{toplam_hasta} Kişi")
         col_m2.metric("Bu Hafta Eklenen Hasta", f"+{haftalik_hasta} Kişi")
@@ -293,10 +292,9 @@ with tab5:
         
         st.divider()
         st.markdown("### 💾 Veritabanını Bilgisayara İndir (Yedek Al)")
-        st.info("Aylık veya haftalık olarak tüm verilerinizi bir Excel/CSV dosyası şeklinde bilgisayarınıza indirmek için aşağıdaki butonu kullanabilirsiniz. İndirdiğiniz dosyayı direkt Excel ile açabilirsiniz.")
+        st.info("Aylık veya haftalık olarak tüm verilerinizi bir Excel/CSV dosyası şeklinde bilgisayarınıza indirmek için aşağıdaki butonu kullanabilirsiniz.")
         
-        # Veriyi CSV formatına çevir (UTF-8 SIG Excel'de Türkçe karakterleri bozmaz)
-        df_indir = df.drop(columns=['Tarih_Obj'], errors='ignore') # Geçici tarih sütununu çıkar
+        df_indir = df.drop(columns=['Tarih_Obj'], errors='ignore')
         csv_data = df_indir.to_csv(index=False).encode('utf-8-sig')
         
         dosya_adi = f"DKY_Yedek_{bugun.strftime('%d_%m_%Y')}.csv"
