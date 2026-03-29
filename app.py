@@ -1,7 +1,7 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 
 # --- SAYFA AYARLARI ---
@@ -40,20 +40,27 @@ def load_data():
         df['Hasta_TC'] = df['Hasta_TC'].astype(str)
         return df
     except Exception as e:
-        st.error(f"⚠️ Bağlantı hatası: {e}\nLütfen Google API anahtarlarının (Service Account) Secrets bölümünde eksiksiz olduğundan emin olun.")
+        st.error(f"⚠️ Bağlantı hatası: {e}")
         st.stop()
         return pd.DataFrame()
 
 df = load_data()
 
 # --- SEKMELER ---
-tab1, tab2, tab3, tab4 = st.tabs(["➕ Yeni Hasta Kaydı", "🧪 Lab Veri Girişi", "🏥 Takip & Sonlanım", "📋 İzlem Paneli (Tümü Düzenlenebilir)"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "➕ Yeni Hasta", 
+    "🧪 Lab Girişi", 
+    "🏥 Takip & Sonlanım", 
+    "📋 İzlem (Düzenle)", 
+    "📈 Raporlar & Yedek"
+])
 
 # ==========================================
-# SEKME 1: YENİ HASTA KAYDI
+# SEKME 1: YENİ HASTA KAYDI (Temizlenir)
 # ==========================================
 with tab1:
     st.subheader("Yeni Hasta Girişi (Vitaller ve Anamnez)")
+    # Sadece Yeni Kayıt formu gönderildiğinde temizlenir
     with st.form("new_reg", clear_on_submit=True):
         c1, c2, c3 = st.columns(3)
         tc = c1.text_input("Hasta TC*", max_chars=11)
@@ -95,7 +102,7 @@ with tab1:
                 st.error("Lütfen 11 haneli TC ve Ad Soyad giriniz.")
 
 # ==========================================
-# SEKME 2: LAB VERİ GİRİŞİ
+# SEKME 2: LAB VERİ GİRİŞİ (Eski veri kalır)
 # ==========================================
 with tab2:
     st.subheader("Laboratuvar Sonuçlarını İşle")
@@ -108,7 +115,8 @@ with tab2:
             row = df[df['Hasta_TC'] == t_id].iloc[0]
             idx = df.index[df['Hasta_TC'] == t_id][0]
             
-            with st.form("lab_form", clear_on_submit=True):
+            # clear_on_submit KALDIRILDI. Eski veriler formda görünür.
+            with st.form("lab_form"):
                 l1, l2, l3, l4, l5 = st.columns(5)
                 f_bun = l1.number_input("BUN", value=float(row['BUN']))
                 f_cre = l2.number_input("Kreatinin", value=float(row['Kreatinin']))
@@ -116,7 +124,7 @@ with tab2:
                 f_pot = l4.number_input("Potasyum", value=float(row['Potasyum']))
                 f_tro = l5.selectbox("Troponin", ["Negatif", "Pozitif"], index=0 if row['Troponin'] != "Pozitif" else 1)
                 
-                if st.form_submit_button("Lab Verilerini Kaydet"):
+                if st.form_submit_button("Lab Verilerini Güncelle"):
                     mehmrg = (2 * row['Yas']) + (60 if row['Ambulans'] == "Evet" else 0) - row['SBP'] + row['Nabiz'] - (2 * row['SaO2']) + (20 * f_cre) + (45 if row['Kanser'] == "Evet" else 0) + (60 if f_tro == "Pozitif" else 0) + (60 if row['Diuretik'] == "Evet" else 0) + 12
                     if f_pot >= 4.6: mehmrg += 30
                     elif f_pot <= 3.9: mehmrg += 5
@@ -139,12 +147,11 @@ with tab2:
                     
                     conn.update(data=df)
                     st.cache_data.clear()
-                    st.success("✅ Skorlar güncellendi, form temizlendi.")
-                    time.sleep(1.5)
+                    st.success("✅ Veriler ve skorlar güncellendi!")
                     st.rerun()
 
 # ==========================================
-# SEKME 3: TAKİP & SONLANIM
+# SEKME 3: TAKİP & SONLANIM (Eski veri kalır)
 # ==========================================
 with tab3:
     st.subheader("Yatış Bilgileri ve Mortalite Takibi")
@@ -157,7 +164,8 @@ with tab3:
             row2 = df[df['Hasta_TC'] == t_id2].iloc[0]
             idx2 = df.index[df['Hasta_TC'] == t_id2][0]
             
-            with st.form("follow_form", clear_on_submit=True):
+            # clear_on_submit KALDIRILDI. Eski yatış günleri vs. ekranda görünür.
+            with st.form("follow_form"):
                 f1, f2, f3 = st.columns(3)
                 son_ops = ["Bilinmiyor", "Taburcu", "Servis Yatış", "Yoğun Bakım"]
                 s_idx = son_ops.index(row2['AS_Sonlanim']) if row2['AS_Sonlanim'] in son_ops else 0
@@ -184,27 +192,24 @@ with tab3:
                     conn.update(data=df)
                     st.cache_data.clear()
                     st.success("✅ Takip verileri güncellendi.")
-                    time.sleep(1.5)
                     st.rerun()
 
 # ==========================================
-# SEKME 4: İZLEM PANELI VE HIZLI DÜZENLEME
+# SEKME 4: İZLEM PANELI (Düzenlenebilir Tablo)
 # ==========================================
 with tab4:
     st.subheader("Vaka Kontrol ve Hızlı Düzenleme Paneli")
-    st.info("💡 Tablodaki hücrelere çift tıklayarak tüm verileri değiştirebilirsiniz. Değişiklikleriniz skorları otomatik güncelleyecektir. Sağa doğru kaydırarak tüm sütunları görebilirsiniz.")
+    st.info("💡 Tablodaki hücrelere çift tıklayarak tüm verileri değiştirebilirsiniz. Sağa doğru kaydırarak tüm sütunları görebilirsiniz.")
     
     if not df.empty:
         df_view = df.copy()
         
-        # Eksik veri kontrolü
         def get_status(r):
             if r['BUN'] == 0.0 or r['Mortalite_30G'] == "Bilinmiyor": return "🔴 Eksik"
             return "🟢 Tamam"
         
         df_view.insert(0, 'Durum', df_view.apply(get_status, axis=1))
         
-        # Tüm sütunlar ekranda (Sadece otomatik hesaplananları düzenlemeye kapatıyoruz)
         all_cols = ['Durum', 'Kayit_Tarihi', 'Hasta_TC', 'Ad_Soyad', 'Yas', 'SBP', 'Nabiz', 'SaO2', 
                     'Ambulans', 'Kanser', 'Diuretik', 'KOAH', 'BUN', 'Kreatinin', 'Sodyum', 'Potasyum', 
                     'Troponin', 'mEHMRG_Skoru', 'ADHERE_Grubu', 'GWTG_Skoru', 'AS_Sonlanim', 
@@ -214,11 +219,10 @@ with tab4:
             df_view[all_cols],
             use_container_width=True,
             hide_index=True,
-            disabled=["Durum", "Kayit_Tarihi", "Hasta_TC", "mEHMRG_Skoru", "ADHERE_Grubu", "GWTG_Skoru"] # Skorlar kilitli
+            disabled=["Durum", "Kayit_Tarihi", "Hasta_TC", "mEHMRG_Skoru", "ADHERE_Grubu", "GWTG_Skoru"]
         )
         
         if st.button("💾 Tablodaki Değişiklikleri Kaydet ve Skorları Güncelle"):
-            # Tüm düzenlenebilir sütunları ana veritabanına aktar
             for idx, row in edited_df.iterrows():
                 df.at[idx, 'Ad_Soyad'] = str(row['Ad_Soyad'])
                 df.at[idx, 'Yas'] = int(row['Yas'])
@@ -240,7 +244,6 @@ with tab4:
                 df.at[idx, 'Mortalite_7G'] = str(row['Mortalite_7G'])
                 df.at[idx, 'Mortalite_30G'] = str(row['Mortalite_30G'])
                 
-                # Risk skorlarını yeni girilen verilerle otomatik olarak tekrar hesapla
                 r = df.iloc[idx]
                 try:
                     mehmrg = (2 * r['Yas']) + (60 if r['Ambulans'] == "Evet" else 0) - r['SBP'] + r['Nabiz'] - (2 * r['SaO2']) + (20 * r['Kreatinin']) + (45 if r['Kanser'] == "Evet" else 0) + (60 if r['Troponin'] == "Pozitif" else 0) + (60 if r['Diuretik'] == "Evet" else 0) + 12
@@ -260,11 +263,49 @@ with tab4:
                 except:
                     pass
             
-            # Değişiklikleri Google Sheets'e gönder
             conn.update(data=df)
             st.cache_data.clear()
-            st.success("✅ Tüm veriler kaydedildi ve risk skorları başarıyla güncellendi!")
-            time.sleep(1.5)
+            st.success("✅ Tüm veriler kaydedildi!")
             st.rerun()
-    else: 
-        st.info("Henüz kayıtlı hasta yok.")
+
+# ==========================================
+# SEKME 5: RAPORLAR VE YEDEKLEME
+# ==========================================
+with tab5:
+    st.subheader("📊 Araştırma İstatistikleri ve Yedekleme")
+    if not df.empty:
+        # Tarih formatını hesaplanabilir hale getir (Haftalık rapor için)
+        df['Tarih_Obj'] = pd.to_datetime(df['Kayit_Tarihi'], format="%d/%m/%Y %H:%M", errors='coerce')
+        
+        bugun = datetime.now()
+        bir_hafta_once = bugun - timedelta(days=7)
+        
+        # Haftalık ve Toplam Hesaplamalar
+        toplam_hasta = len(df)
+        haftalik_hasta = len(df[df['Tarih_Obj'] >= bir_hafta_once])
+        eksik_veri = len(df[(df['BUN'] == 0.0) | (df['Mortalite_30G'] == "Bilinmiyor")])
+        
+        # Metrikleri Gösterme
+        col_m1, col_m2, col_m3 = st.columns(3)
+        col_m1.metric("Toplam Kaydedilen Hasta", f"{toplam_hasta} Kişi")
+        col_m2.metric("Bu Hafta Eklenen Hasta", f"+{haftalik_hasta} Kişi")
+        col_m3.metric("Eksik Verisi Olan Hasta", f"{eksik_veri} Kişi", delta="-İncelenmeli", delta_color="inverse")
+        
+        st.divider()
+        st.markdown("### 💾 Veritabanını Bilgisayara İndir (Yedek Al)")
+        st.info("Aylık veya haftalık olarak tüm verilerinizi bir Excel/CSV dosyası şeklinde bilgisayarınıza indirmek için aşağıdaki butonu kullanabilirsiniz. İndirdiğiniz dosyayı direkt Excel ile açabilirsiniz.")
+        
+        # Veriyi CSV formatına çevir (UTF-8 SIG Excel'de Türkçe karakterleri bozmaz)
+        df_indir = df.drop(columns=['Tarih_Obj'], errors='ignore') # Geçici tarih sütununu çıkar
+        csv_data = df_indir.to_csv(index=False).encode('utf-8-sig')
+        
+        dosya_adi = f"DKY_Yedek_{bugun.strftime('%d_%m_%Y')}.csv"
+        
+        st.download_button(
+            label="📥 Tüm Verileri İndir (Excel/CSV Formatında)",
+            data=csv_data,
+            file_name=dosya_adi,
+            mime="text/csv"
+        )
+    else:
+        st.info("Henüz sistemde raporlanacak hasta bulunmamaktadır.")
