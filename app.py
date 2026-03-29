@@ -47,14 +47,13 @@ def load_data():
 df = load_data()
 
 # --- SEKMELER ---
-tab1, tab2, tab3, tab4 = st.tabs(["➕ Yeni Hasta Kaydı", "🧪 Lab Veri Girişi", "🏥 Takip & Sonlanım", "📋 İzlem Paneli"])
+tab1, tab2, tab3, tab4 = st.tabs(["➕ Yeni Hasta Kaydı", "🧪 Lab Veri Girişi", "🏥 Takip & Sonlanım", "📋 İzlem Paneli (Düzenlenebilir)"])
 
 # ==========================================
-# SEKME 1: YENİ HASTA KAYDI (Vitaller & Anamnez)
+# SEKME 1: YENİ HASTA KAYDI
 # ==========================================
 with tab1:
     st.subheader("Yeni Hasta Girişi (Vitaller ve Anamnez)")
-    # clear_on_submit=True ile butona basıldığında form içindeki her şey sıfırlanır
     with st.form("new_reg", clear_on_submit=True):
         c1, c2, c3 = st.columns(3)
         tc = c1.text_input("Hasta TC*", max_chars=11)
@@ -89,20 +88,20 @@ with tab1:
                 conn.update(data=updated)
                 st.cache_data.clear()
                 
-                st.success("✅ Hasta başarıyla kaydedildi! Form temizlendi, yeni hasta girebilir veya düzenleme sekmelerine geçebilirsiniz.")
-                time.sleep(1.5) # Mesajın ekranda 1.5 saniye kalmasını sağlar
-                st.rerun() # Sayfayı yeniler
+                st.success("✅ Hasta başarıyla kaydedildi! Form temizlendi.")
+                time.sleep(1.5)
+                st.rerun()
             else: 
                 st.error("Lütfen 11 haneli TC ve Ad Soyad giriniz.")
 
 # ==========================================
-# SEKME 2: LAB VERİ GİRİŞİ (Arama + Lab)
+# SEKME 2: LAB VERİ GİRİŞİ
 # ==========================================
 with tab2:
     st.subheader("Laboratuvar Sonuçlarını İşle")
     if not df.empty:
         search_list = (df['Hasta_TC'] + " - " + df['Ad_Soyad']).tolist()
-        choice = st.selectbox("Hasta Seçin (TC veya İsim yazarak arayın):", ["Seçiniz..."] + search_list)
+        choice = st.selectbox("Hasta Seçin (TC veya İsim):", ["Seçiniz..."] + search_list)
         
         if choice != "Seçiniz...":
             t_id = choice.split(" - ")[0]
@@ -117,7 +116,7 @@ with tab2:
                 f_pot = l4.number_input("Potasyum", value=float(row['Potasyum']))
                 f_tro = l5.selectbox("Troponin", ["Negatif", "Pozitif"], index=0 if row['Troponin'] != "Pozitif" else 1)
                 
-                if st.form_submit_button("Laboratuvar Verilerini Kaydet ve Skorları Hesapla"):
+                if st.form_submit_button("Lab Verilerini Kaydet"):
                     mehmrg = (2 * row['Yas']) + (60 if row['Ambulans'] == "Evet" else 0) - row['SBP'] + row['Nabiz'] - (2 * row['SaO2']) + (20 * f_cre) + (45 if row['Kanser'] == "Evet" else 0) + (60 if f_tro == "Pozitif" else 0) + (60 if row['Diuretik'] == "Evet" else 0) + 12
                     if f_pot >= 4.6: mehmrg += 30
                     elif f_pot <= 3.9: mehmrg += 5
@@ -140,18 +139,18 @@ with tab2:
                     
                     conn.update(data=df)
                     st.cache_data.clear()
-                    st.success("✅ Laboratuvar verileri kaydedildi ve tüm skorlar güncellendi!")
+                    st.success("✅ Skorlar güncellendi, form temizlendi.")
                     time.sleep(1.5)
                     st.rerun()
 
 # ==========================================
-# SEKME 3: TAKİP & SONLANIM (Arama + Yatış)
+# SEKME 3: TAKİP & SONLANIM
 # ==========================================
 with tab3:
     st.subheader("Yatış Bilgileri ve Mortalite Takibi")
     if not df.empty:
         search_list_2 = (df['Hasta_TC'] + " - " + df['Ad_Soyad']).tolist()
-        choice_2 = st.selectbox("Takip Girişi İçin Hasta Seçin:", ["Seçiniz..."] + search_list_2, key="search2")
+        choice_2 = st.selectbox("Takip Girişi İçin Seçin:", ["Seçiniz..."] + search_list_2, key="search2")
         
         if choice_2 != "Seçiniz...":
             t_id2 = choice_2.split(" - ")[0]
@@ -184,23 +183,75 @@ with tab3:
                     
                     conn.update(data=df)
                     st.cache_data.clear()
-                    st.success("✅ Takip verileri başarıyla güncellendi.")
+                    st.success("✅ Takip verileri güncellendi.")
                     time.sleep(1.5)
                     st.rerun()
 
 # ==========================================
-# SEKME 4: İZLEM PANELI (Liste)
+# SEKME 4: İZLEM PANELI VE HIZLI DÜZENLEME
 # ==========================================
 with tab4:
-    st.subheader("Vaka Kontrol Paneli")
+    st.subheader("Vaka Kontrol ve Hızlı Düzenleme Paneli")
+    st.info("💡 Tablodaki herhangi bir hücreye **çift tıklayarak** veriyi tıpkı Excel'deki gibi doğrudan değiştirebilirsiniz. Tüm değişiklikleri bitirdikten sonra aşağıdaki kaydet butonuna basın.")
+    
     if not df.empty:
+        # Görsel Durum Etiketi Ekleme (🔴 Eksik / 🟢 Tamam)
+        df_view = df.copy()
         def get_status(r):
             if r['BUN'] == 0.0 or r['Mortalite_30G'] == "Bilinmiyor": return "🔴 Eksik"
             return "🟢 Tamam"
         
-        df_view = df.copy()
-        df_view['Durum'] = df_view.apply(get_status, axis=1)
-        disp_cols = ['Durum', 'Hasta_TC', 'Ad_Soyad', 'mEHMRG_Skoru', 'ADHERE_Grubu', 'AS_Sonlanim', 'Mortalite_30G']
-        st.dataframe(df_view[disp_cols], use_container_width=True, hide_index=True)
+        # En başa 'Durum' sütunu ekleniyor
+        df_view.insert(0, 'Durum', df_view.apply(get_status, axis=1))
+        
+        # Sadece bu sütunları ekranda gösterip düzenlemeye açıyoruz
+        disp_cols = ['Durum', 'Kayit_Tarihi', 'Hasta_TC', 'Ad_Soyad', 'SBP', 'BUN', 'Kreatinin', 'Troponin', 'mEHMRG_Skoru', 'ADHERE_Grubu', 'AS_Sonlanim', 'Mortalite_30G']
+        
+        # Data Editor (Kullanıcı çift tıklayıp değiştirebilir)
+        edited_df = st.data_editor(
+            df_view[disp_cols],
+            use_container_width=True,
+            hide_index=True,
+            disabled=["Durum", "Kayit_Tarihi", "Hasta_TC", "mEHMRG_Skoru", "ADHERE_Grubu"] # TC ve hesaplanan risk skorları kilitli
+        )
+        
+        if st.button("💾 Tablodaki Değişiklikleri Kaydet ve Skorları Güncelle"):
+            # Orijinal tabloyu (df) düzenlenen hücrelerle eşleştir ve skorları yeniden hesapla
+            for idx, row in edited_df.iterrows():
+                # Kullanıcının ekranda değiştirdiği verileri ana df'e aktar
+                df.at[idx, 'SBP'] = float(row['SBP'])
+                df.at[idx, 'BUN'] = float(row['BUN'])
+                df.at[idx, 'Kreatinin'] = float(row['Kreatinin'])
+                df.at[idx, 'Troponin'] = str(row['Troponin'])
+                df.at[idx, 'Ad_Soyad'] = str(row['Ad_Soyad'])
+                df.at[idx, 'AS_Sonlanim'] = str(row['AS_Sonlanim'])
+                df.at[idx, 'Mortalite_30G'] = str(row['Mortalite_30G'])
+                
+                # Yeni değerlere göre skorları arka planda otomatik hesapla
+                r = df.iloc[idx]
+                try:
+                    mehmrg = (2 * r['Yas']) + (60 if r['Ambulans'] == "Evet" else 0) - r['SBP'] + r['Nabiz'] - (2 * r['SaO2']) + (20 * r['Kreatinin']) + (45 if r['Kanser'] == "Evet" else 0) + (60 if r['Troponin'] == "Pozitif" else 0) + (60 if r['Diuretik'] == "Evet" else 0) + 12
+                    if r['Potasyum'] >= 4.6: mehmrg += 30
+                    elif r['Potasyum'] <= 3.9: mehmrg += 5
+                    
+                    adhere = "Yüksek Risk" if (r['BUN'] >= 43 and r['SBP'] < 115) else "Düşük/Orta"
+                    
+                    gwtg = (r['Yas'] // 10) * 3 + (2 if r['KOAH'] == "Evet" else 0)
+                    if r['BUN'] >= 40: gwtg += 8
+                    if r['SBP'] < 100: gwtg += 15
+                    if r['Sodyum'] < 135: gwtg += 4
+                    
+                    df.at[idx, 'mEHMRG_Skoru'] = round(mehmrg, 2)
+                    df.at[idx, 'ADHERE_Grubu'] = adhere
+                    df.at[idx, 'GWTG_Skoru'] = gwtg
+                except:
+                    pass
+            
+            # Ana veritabanını (Google Sheets) güncelle
+            conn.update(data=df)
+            st.cache_data.clear()
+            st.success("✅ Değişiklikler kaydedildi ve risk skorları başarıyla güncellendi!")
+            time.sleep(1.5)
+            st.rerun()
     else: 
         st.info("Henüz kayıtlı hasta yok.")
