@@ -5,24 +5,35 @@ from datetime import datetime, timedelta
 import time
 
 # --- SAYFA AYARLARI ---
-st.set_page_config(page_title="Bozan DKY Araştırma Portalı", layout="wide")
+st.set_page_config(page_title="DKY Araştırma Portalı", layout="wide")
 
-# --- GİRİŞ KONTROLÜ ---
+# --- GİRİŞ KONTROLÜ VE OTURUM YÖNETİMİ ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
+    st.session_state.username = ""
 
 if not st.session_state.logged_in:
-    st.title("🔒 Bozan DKY Çalışma Girişi")
+    st.title("🔒 DKY Çalışma Girişi")
     with st.form("login"):
         u = st.text_input("Kullanıcı Adı")
         p = st.text_input("Şifre", type="password")
         if st.form_submit_button("Giriş"):
             if "passwords" in st.secrets and u in st.secrets["passwords"] and st.secrets["passwords"][u] == p:
                 st.session_state.logged_in = True
+                st.session_state.username = u # Kullanıcı adını hafızaya al
                 st.rerun()
             else: 
                 st.error("Hatalı giriş! Şifreyi veya kullanıcı adını kontrol edin.")
     st.stop()
+
+# --- YAN MENÜ (SİDEBAR) - KARŞILAMA VE ÇIKIŞ ---
+with st.sidebar:
+    st.markdown(f"### 👤 Hoş geldin, **{st.session_state.username.capitalize()}**")
+    st.markdown("---")
+    if st.button("🚪 Çıkış Yap"):
+        st.session_state.logged_in = False
+        st.session_state.username = ""
+        st.rerun()
 
 # --- VERİ BAĞLANTISI ---
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -31,13 +42,21 @@ def load_data():
     try:
         df = conn.read(ttl=0) 
         if df.empty:
+            # "Kaydeden" sütunu eklendi
             return pd.DataFrame(columns=[
-                "Kayit_Tarihi", "Hasta_TC", "Ad_Soyad", "Yas", "SBP", "Nabiz", "SaO2",
+                "Kayit_Tarihi", "Kaydeden", "Hasta_TC", "Ad_Soyad", "Yas", "SBP", "Nabiz", "SaO2",
                 "Ambulans", "Kanser", "Diuretik", "KOAH", "BUN", "Kreatinin", "Sodyum", 
                 "Potasyum", "Troponin", "mEHMRG_Skoru", "ADHERE_Grubu", "GWTG_Skoru",
                 "AS_Sonlanim", "Servis_Gunu", "YBU_Gunu", "Mortalite_7G", "Mortalite_30G"
             ])
-        df['Hasta_TC'] = df['Hasta_TC'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+        # Sistemdeki TC'leri temizle
+        if 'Hasta_TC' in df.columns:
+            df['Hasta_TC'] = df['Hasta_TC'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+        
+        # Eğer eski verilerde 'Kaydeden' sütunu yoksa hata vermemesi için otomatik ekle
+        if 'Kaydeden' not in df.columns:
+            df.insert(1, 'Kaydeden', "Bilinmiyor")
+            
         return df
     except Exception as e:
         st.error(f"⚠️ Bağlantı hatası: {e}")
@@ -56,12 +75,11 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 ])
 
 # ==========================================
-# SEKME 1: YENİ HASTA KAYDI (Kırmızı Uyarı ve Çerçeve)
+# SEKME 1: YENİ HASTA KAYDI
 # ==========================================
 with tab1:
     st.subheader("Yeni Hasta Girişi (Vitaller ve Anamnez)")
     
-    # Uyarının aşağıda değil, formun hemen üstünde çıkması için özel alan
     uyari_alani = st.empty()
     
     with st.form("new_reg", clear_on_submit=True):
@@ -91,10 +109,7 @@ with tab1:
             if len(temiz_tc) != 11 or not temiz_isim:
                 uyari_alani.error("Lütfen 11 haneli TC ve Ad Soyad giriniz.")
             elif temiz_tc in sistemdeki_tcler:
-                # 1. Mesajı yukarıdaki alana yazdır
                 uyari_alani.error(f"❌ HATA: '{temiz_tc}' numaralı TC önceki kayıtlarda var! Lütfen TC'yi değiştirin.")
-                
-                # 2. TC Kutusunun çevresini kırmızı yapacak CSS kodunu sayfaya enjekte et
                 st.markdown("""
                     <style>
                     div[data-testid="stTextInput"] input[aria-label="Hasta TC*"] {
@@ -107,6 +122,7 @@ with tab1:
             else:
                 new_row = pd.DataFrame([{
                     "Kayit_Tarihi": datetime.now().strftime("%d/%m/%Y %H:%M"),
+                    "Kaydeden": st.session_state.username,  # İşlemi yapan kişinin adı kaydedilir
                     "Hasta_TC": temiz_tc, "Ad_Soyad": temiz_isim.upper(), "Yas": yas, "SBP": sbp, "Nabiz": hr, "SaO2": sao2,
                     "Ambulans": amb, "Kanser": kan, "Diuretik": diu, "KOAH": koah,
                     "BUN": 0.0, "Kreatinin": 0.0, "Sodyum": 0.0, "Potasyum": 0.0, "Troponin": "Bilinmiyor",
@@ -218,7 +234,7 @@ with tab3:
 # ==========================================
 with tab4:
     st.subheader("Vaka Kontrol ve Hızlı Düzenleme Paneli")
-    st.info("💡 Tablodaki hücrelere çift tıklayarak tüm verileri değiştirebilirsiniz. Sağa doğru kaydırarak tüm sütunları görebilirsiniz.")
+    st.info("💡 Tablodaki hücrelere çift tıklayarak verileri değiştirebilirsiniz. 'Kaydeden' sütunundan veriyi kimin girdiğini görebilirsiniz.")
     
     if not df.empty:
         df_view = df.copy()
@@ -229,7 +245,8 @@ with tab4:
         
         df_view.insert(0, 'Durum', df_view.apply(get_status, axis=1))
         
-        all_cols = ['Durum', 'Kayit_Tarihi', 'Hasta_TC', 'Ad_Soyad', 'Yas', 'SBP', 'Nabiz', 'SaO2', 
+        # 'Kaydeden' sütunu eklendi
+        all_cols = ['Durum', 'Kayit_Tarihi', 'Kaydeden', 'Hasta_TC', 'Ad_Soyad', 'Yas', 'SBP', 'Nabiz', 'SaO2', 
                     'Ambulans', 'Kanser', 'Diuretik', 'KOAH', 'BUN', 'Kreatinin', 'Sodyum', 'Potasyum', 
                     'Troponin', 'mEHMRG_Skoru', 'ADHERE_Grubu', 'GWTG_Skoru', 'AS_Sonlanim', 
                     'Servis_Gunu', 'YBU_Gunu', 'Mortalite_7G', 'Mortalite_30G']
@@ -238,7 +255,8 @@ with tab4:
             df_view[all_cols],
             use_container_width=True,
             hide_index=True,
-            disabled=["Durum", "Kayit_Tarihi", "Hasta_TC", "mEHMRG_Skoru", "ADHERE_Grubu", "GWTG_Skoru"]
+            # Kaydeden kişiyi ve TC'yi kimse değiştiremesin diye kilitliyoruz
+            disabled=["Durum", "Kayit_Tarihi", "Kaydeden", "Hasta_TC", "mEHMRG_Skoru", "ADHERE_Grubu", "GWTG_Skoru"]
         )
         
         if st.button("💾 Tablodaki Değişiklikleri Kaydet ve Skorları Güncelle"):
